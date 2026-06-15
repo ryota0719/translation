@@ -1,0 +1,400 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>自動バックトランスレーション (音声入力対応)</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/lucide@latest"></script>
+</head>
+<body class="min-h-screen bg-slate-50 text-slate-800 p-4 md:p-8 font-sans">
+  <div class="max-w-6xl mx-auto space-y-6">
+    
+    <header class="mb-8 text-center">
+      <div class="flex items-center justify-center gap-3 mb-2">
+        <i data-lucide="refresh-cw" class="w-8 h-8 text-indigo-600"></i>
+        <h1 class="text-3xl font-bold text-slate-900">自動バックトランスレーション</h1>
+      </div>
+      <p class="text-slate-600">翻訳と再翻訳を同時に行い、翻訳のニュアンスが意図通りか確認できます。音声入力にも対応しています。</p>
+    </header>
+
+    <div id="errorContainer" class="hidden bg-red-50 border-l-4 border-red-500 p-4 rounded-r-md flex items-start gap-3">
+      <i data-lucide="alert-circle" class="w-5 h-5 text-red-500 mt-0.5 shrink-0"></i>
+      <p id="errorMessage" class="text-red-700"></p>
+    </div>
+
+    <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-200 flex flex-col md:flex-row items-center justify-between gap-4">
+      <div class="flex items-center w-full md:w-auto gap-3 flex-1 justify-center md:justify-start">
+        
+        <div class="flex items-center gap-2 bg-slate-100 p-1.5 rounded-lg border border-slate-200">
+          <i data-lucide="languages" class="w-4 h-4 text-slate-500 ml-2"></i>
+          <select id="sourceLang" class="bg-transparent border-none focus:ring-0 text-sm font-medium text-slate-700 py-1 pr-6 cursor-pointer outline-none">
+            </select>
+        </div>
+
+        <button id="swapBtn" class="p-2 hover:bg-slate-100 rounded-full transition-colors text-slate-400 hover:text-indigo-600" title="言語を入れ替える">
+          <i data-lucide="arrow-right-left" class="w-5 h-5"></i>
+        </button>
+
+        <div class="flex items-center gap-2 bg-slate-100 p-1.5 rounded-lg border border-slate-200">
+          <i data-lucide="languages" class="w-4 h-4 text-slate-500 ml-2"></i>
+          <select id="targetLang" class="bg-transparent border-none focus:ring-0 text-sm font-medium text-slate-700 py-1 pr-6 cursor-pointer outline-none">
+            </select>
+        </div>
+      </div>
+
+      <button id="translateBtn" class="w-full md:w-auto flex items-center justify-center gap-2 px-6 py-2.5 rounded-lg font-medium text-white bg-indigo-600 hover:bg-indigo-700 shadow-md hover:shadow-lg active:scale-95 transition-all">
+        <i id="translateIcon" data-lucide="play" class="w-5 h-5 fill-current"></i>
+        <i id="loadingIcon" data-lucide="refresh-cw" class="w-5 h-5 animate-spin hidden"></i>
+        <span id="translateBtnText">翻訳・確認を実行</span>
+      </button>
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      
+      <div class="flex flex-col bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden relative">
+        <div class="bg-slate-50 border-b border-slate-200 px-4 py-3 flex justify-between items-center">
+          <div class="flex items-center gap-2">
+            <span class="w-6 h-6 rounded-full bg-slate-200 text-slate-600 flex items-center justify-center text-xs font-bold">1</span>
+            <h2 class="font-semibold text-slate-700">入力欄</h2>
+          </div>
+          <span id="sourceLangLabel" class="text-xs font-medium px-2 py-1 bg-white border border-slate-200 rounded text-slate-500">
+            日本語
+          </span>
+        </div>
+        <div class="relative flex-1">
+          <textarea id="inputText" placeholder="翻訳したい文章を入力するか、マイクボタンを押して話してください..." class="w-full h-64 p-4 pb-14 resize-none border-none focus:ring-2 focus:ring-indigo-500 focus:outline-none text-slate-700 leading-relaxed"></textarea>
+          
+          <button id="micBtn" class="absolute bottom-4 left-4 p-3 bg-slate-100 hover:bg-indigo-50 border border-slate-200 rounded-full text-slate-600 hover:text-indigo-600 transition-all shadow-sm flex items-center justify-center" title="音声入力を開始/停止">
+            <i id="micIcon" data-lucide="mic" class="w-5 h-5"></i>
+            <span id="micStatusText" class="text-xs font-medium max-w-0 overflow-hidden whitespace-nowrap transition-all duration-300"></span>
+          </button>
+        </div>
+        <div class="bg-slate-50 px-4 py-2 text-right border-t border-slate-100 text-xs text-slate-400">
+          <span id="charCount">0</span> 文字
+        </div>
+      </div>
+
+      <div class="flex flex-col bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden relative group">
+        <div class="bg-indigo-50 border-b border-indigo-100 px-4 py-3 flex justify-between items-center">
+          <div class="flex items-center gap-2">
+            <span class="w-6 h-6 rounded-full bg-indigo-200 text-indigo-700 flex items-center justify-center text-xs font-bold">2</span>
+            <h2 class="font-semibold text-indigo-900">出力欄 (翻訳)</h2>
+          </div>
+          <span id="targetLangLabel" class="text-xs font-medium px-2 py-1 bg-white border border-indigo-100 rounded text-indigo-600">
+            英語
+          </span>
+        </div>
+        <div class="relative w-full h-64">
+          <textarea id="translatedText" readonly placeholder="翻訳結果がここに表示されます" class="w-full h-full p-4 resize-none border-none focus:outline-none leading-relaxed text-slate-800 bg-white"></textarea>
+          <button id="copyTargetBtn" class="hidden absolute bottom-4 right-4 p-2 bg-white border border-slate-200 shadow-sm rounded-md text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 transition-colors" title="コピー">
+            <i data-lucide="copy" class="w-4 h-4"></i>
+          </button>
+          <div id="copyTargetSuccess" class="hidden absolute bottom-4 right-4 p-2 bg-white border border-slate-200 shadow-sm rounded-md text-green-600">
+            <i data-lucide="check" class="w-4 h-4"></i>
+          </div>
+        </div>
+      </div>
+
+      <div class="flex flex-col bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden relative group">
+        <div class="bg-emerald-50 border-b border-emerald-100 px-4 py-3 flex justify-between items-center">
+          <div class="flex items-center gap-2">
+            <span class="w-6 h-6 rounded-full bg-emerald-200 text-emerald-800 flex items-center justify-center text-xs font-bold">3</span>
+            <h2 class="font-semibold text-emerald-900">出力の確認欄 (再翻訳)</h2>
+          </div>
+          <span id="backLangLabel" class="text-xs font-medium px-2 py-1 bg-white border border-emerald-100 rounded text-emerald-700">
+            日本語
+          </span>
+        </div>
+        <div class="relative w-full h-64">
+          <textarea id="backTranslatedText" readonly placeholder="翻訳結果を元の言語に戻した結果が表示されます。入力欄の意図と合っているか確認できます。" class="w-full h-full p-4 resize-none border-none focus:outline-none leading-relaxed text-slate-800 bg-white"></textarea>
+          <button id="copyBackBtn" class="hidden absolute bottom-4 right-4 p-2 bg-white border border-slate-200 shadow-sm rounded-md text-slate-500 hover:text-emerald-600 hover:bg-emerald-50 transition-colors" title="コピー">
+            <i data-lucide="copy" class="w-4 h-4"></i>
+          </button>
+          <div id="copyBackSuccess" class="hidden absolute bottom-4 right-4 p-2 bg-white border border-slate-200 shadow-sm rounded-md text-green-600">
+            <i data-lucide="check" class="w-4 h-4"></i>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <script>
+    // アイコンの初期化
+    lucide.createIcons();
+
+    // 対応言語リスト
+    const languages = [
+      { code: 'ja', name: '日本語' },
+      { code: 'en', name: '英語' },
+      { code: 'zh-CN', name: '中国語 (簡体)' },
+      { code: 'ko', name: '韓国語' },
+      { code: 'fr', name: 'フランス語' },
+      { code: 'de', name: 'ドイツ語' },
+      { code: 'es', name: 'スペイン語' },
+      { code: 'ne', name: 'ネパール語' },
+      { code: 'th', name: 'タイ語' },
+      { code: 'my', name: 'ビルマ語' },
+      { code: 'tl', name: 'タガログ語' },
+    ];
+
+    // DOM要素の取得
+    const sourceSelect = document.getElementById('sourceLang');
+    const targetSelect = document.getElementById('targetLang');
+    const sourceLangLabel = document.getElementById('sourceLangLabel');
+    const targetLangLabel = document.getElementById('targetLangLabel');
+    const backLangLabel = document.getElementById('backLangLabel');
+    
+    const inputText = document.getElementById('inputText');
+    const translatedText = document.getElementById('translatedText');
+    const backTranslatedText = document.getElementById('backTranslatedText');
+    const charCount = document.getElementById('charCount');
+    
+    const translateBtn = document.getElementById('translateBtn');
+    const translateIcon = document.getElementById('translateIcon');
+    const loadingIcon = document.getElementById('loadingIcon');
+    const translateBtnText = document.getElementById('translateBtnText');
+    const swapBtn = document.getElementById('swapBtn');
+    
+    const errorContainer = document.getElementById('errorContainer');
+    const errorMessage = document.getElementById('errorMessage');
+
+    const copyTargetBtn = document.getElementById('copyTargetBtn');
+    const copyTargetSuccess = document.getElementById('copyTargetSuccess');
+    const copyBackBtn = document.getElementById('copyBackBtn');
+    const copyBackSuccess = document.getElementById('copyBackSuccess');
+
+    const micBtn = document.getElementById('micBtn');
+    const micIcon = document.getElementById('micIcon');
+    const micStatusText = document.getElementById('micStatusText');
+
+    // セレクトボックスの初期化
+    languages.forEach(lang => {
+      sourceSelect.add(new Option(lang.name, lang.code));
+      targetSelect.add(new Option(lang.name, lang.code));
+    });
+    sourceSelect.value = 'ja';
+    targetSelect.value = 'en';
+
+    // ラベルの更新関数
+    const updateLabels = () => {
+      const srcName = languages.find(l => l.code === sourceSelect.value)?.name || '';
+      const tgtName = languages.find(l => l.code === targetSelect.value)?.name || '';
+      sourceLangLabel.textContent = srcName;
+      targetLangLabel.textContent = tgtName;
+      backLangLabel.textContent = srcName;
+    };
+
+    // イベントリスナー
+    sourceSelect.addEventListener('change', updateLabels);
+    targetSelect.addEventListener('change', updateLabels);
+
+    inputText.addEventListener('input', () => {
+      charCount.textContent = inputText.value.length;
+    });
+
+    swapBtn.addEventListener('click', () => {
+      const temp = sourceSelect.value;
+      sourceSelect.value = targetSelect.value;
+      targetSelect.value = temp;
+      updateLabels();
+      
+      if (translatedText.value) {
+        inputText.value = translatedText.value;
+        charCount.textContent = inputText.value.length;
+        translatedText.value = '';
+        backTranslatedText.value = '';
+        toggleCopyButtons();
+      }
+    });
+
+    const toggleCopyButtons = () => {
+      if (translatedText.value) copyTargetBtn.classList.remove('hidden');
+      else copyTargetBtn.classList.add('hidden');
+      
+      if (backTranslatedText.value) copyBackBtn.classList.remove('hidden');
+      else copyBackBtn.classList.add('hidden');
+    };
+
+    const handleCopy = (textarea, btn, successBtn) => {
+      if (!textarea.value) return;
+      textarea.select();
+      try {
+        document.execCommand('copy');
+        window.getSelection().removeAllRanges();
+        btn.classList.add('hidden');
+        successBtn.classList.remove('hidden');
+        setTimeout(() => {
+          successBtn.classList.add('hidden');
+          btn.classList.remove('hidden');
+        }, 2000);
+      } catch (err) {
+        console.error('コピーに失敗しました', err);
+      }
+    };
+
+    copyTargetBtn.addEventListener('click', () => handleCopy(translatedText, copyTargetBtn, copyTargetSuccess));
+    copyBackBtn.addEventListener('click', () => handleCopy(backTranslatedText, copyBackBtn, copyBackSuccess));
+
+    // --- 音声入力 (Web Speech API) の実装 ---
+    let recognition = null;
+    let isListening = false;
+
+    // ブラウザが音声認識に対応しているか確認
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    
+    if (!SpeechRecognition) {
+      micBtn.classList.add('hidden'); // 未対応ブラウザではボタンを隠す
+      console.warn('このブラウザは音声認識に対応していません。');
+    } else {
+      recognition = new SpeechRecognition();
+      recognition.continuous = true; // 連続して認識
+      recognition.interimResults = true; // 途中の結果も取得
+
+      // 音声認識が開始されたとき
+      recognition.onstart = () => {
+        isListening = true;
+        micBtn.classList.replace('bg-slate-100', 'bg-red-500');
+        micBtn.classList.replace('text-slate-600', 'text-white');
+        micBtn.classList.replace('hover:text-indigo-600', 'hover:text-white');
+        micBtn.classList.replace('hover:bg-indigo-50', 'hover:bg-red-600');
+        micStatusText.textContent = '音声認識中...';
+        micStatusText.classList.remove('max-w-0');
+        micStatusText.classList.add('max-w-xs', 'ml-2');
+      };
+
+      // 音声認識が終了したとき
+      recognition.onend = () => {
+        isListening = false;
+        micBtn.classList.replace('bg-red-500', 'bg-slate-100');
+        micBtn.classList.replace('text-white', 'text-slate-600');
+        micBtn.classList.replace('hover:text-white', 'hover:text-indigo-600');
+        micBtn.classList.replace('hover:bg-red-600', 'hover:bg-indigo-50');
+        micStatusText.textContent = '';
+        micStatusText.classList.replace('max-w-xs', 'max-w-0');
+        micStatusText.classList.remove('ml-2');
+      };
+
+      // 音声を認識したとき
+      let finalTranscript = '';
+      recognition.onresult = (event) => {
+        let interimTranscript = '';
+        for (let i = event.resultIndex; i < event.results.length; ++i) {
+          if (event.results[i].isFinal) {
+            finalTranscript += event.results[i][0].transcript;
+          } else {
+            interimTranscript += event.results[i][0].transcript;
+          }
+        }
+        // テキストエリアに反映 (既存のテキストに追記されるように考慮)
+        const baseText = finalTranscript || interimTranscript;
+        if(baseText) {
+          inputText.value = baseText;
+          charCount.textContent = inputText.value.length;
+        }
+      };
+
+      recognition.onerror = (event) => {
+        console.error('音声認識エラー:', event.error);
+        if (event.error === 'not-allowed') {
+          showError('マイクの使用が許可されていません。ブラウザの設定を確認してください。');
+        }
+        recognition.stop();
+      };
+
+      // マイクボタンのクリックイベント
+      micBtn.addEventListener('click', () => {
+        if (isListening) {
+          recognition.stop();
+        } else {
+          errorContainer.classList.add('hidden');
+          // 「1. 入力欄」の選択されている言語（プルダウンの値）を認識言語に設定
+          // Google翻訳のコードとSpeechAPIのコードをマッピング (zh-CNのみ変換が必要)
+          let langCode = sourceSelect.value;
+          if (langCode === 'zh-CN') langCode = 'zh-CN';
+          if (langCode === 'tl') langCode = 'fil-PH'; // タガログ語はfil-PHが一般的
+          
+          recognition.lang = langCode;
+          finalTranscript = inputText.value; // 現在入力されている文字を引き継ぐ
+          recognition.start();
+        }
+      });
+    }
+
+    // Google翻訳API呼び出し
+    const translate = async (text, sl, tl) => {
+      const url = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=${sl}&tl=${tl}&dt=t&q=${encodeURIComponent(text)}`;
+      const response = await fetch(url);
+      if (!response.ok) throw new Error('API Error');
+      const data = await response.json();
+      return data[0].map(item => item[0]).join('');
+    };
+
+    // 翻訳実行処理
+    translateBtn.addEventListener('click', async () => {
+      const text = inputText.value.trim();
+      const sl = sourceSelect.value;
+      const tl = targetSelect.value;
+
+      if (!text) {
+        showError('テキストを入力してください。');
+        return;
+      }
+      if (sl === tl) {
+        showError('元の言語と翻訳先の言語は異なるものを選択してください。');
+        return;
+      }
+
+      // 音声認識中なら止める
+      if (isListening) recognition.stop();
+
+      // ローディング状態開始
+      errorContainer.classList.add('hidden');
+      translateBtn.disabled = true;
+      translateBtn.classList.replace('bg-indigo-600', 'bg-indigo-400');
+      translateIcon.classList.add('hidden');
+      loadingIcon.classList.remove('hidden');
+      translateBtnText.textContent = '翻訳中...';
+      translatedText.value = '';
+      backTranslatedText.value = '';
+      translatedText.placeholder = '翻訳しています...';
+      backTranslatedText.placeholder = '再翻訳しています...';
+      translatedText.classList.add('text-slate-400');
+      backTranslatedText.classList.add('text-slate-400');
+      toggleCopyButtons();
+
+      try {
+        const translated = await translate(text, sl, tl);
+        translatedText.value = translated;
+        translatedText.classList.remove('text-slate-400');
+        toggleCopyButtons();
+
+        const backTranslated = await translate(translated, tl, sl);
+        backTranslatedText.value = backTranslated;
+        backTranslatedText.classList.remove('text-slate-400');
+        toggleCopyButtons();
+        
+      } catch (err) {
+        console.error(err);
+        showError('翻訳処理中にエラーが発生しました。時間をおいて再度お試しください。');
+      } finally {
+        translateBtn.disabled = false;
+        translateBtn.classList.replace('bg-indigo-400', 'bg-indigo-600');
+        translateIcon.classList.remove('hidden');
+        loadingIcon.classList.add('hidden');
+        translateBtnText.textContent = '翻訳・確認を実行';
+        translatedText.placeholder = '翻訳結果がここに表示されます';
+        backTranslatedText.placeholder = '翻訳結果を元の言語に戻した結果が表示されます。入力欄の意図と合っているか確認できます。';
+      }
+    });
+
+    const showError = (msg) => {
+      errorMessage.textContent = msg;
+      errorContainer.classList.remove('hidden');
+    };
+
+    updateLabels();
+  </script>
+</body>
+</html>
